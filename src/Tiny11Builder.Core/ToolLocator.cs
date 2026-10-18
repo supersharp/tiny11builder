@@ -82,8 +82,10 @@ public static class ToolLocator
         var action = new Guid("00AAC56B-CD44-11D0-8CC2-00C04FC295EE");
         var result = WinVerifyTrust(new IntPtr(-1), ref action, ref data);
         if (result != 0) throw new Win32Exception(result, $"{filename} does not have a trusted Authenticode signature.");
+#pragma warning disable SYSLIB0057 // X509CertificateLoader does not support reading Authenticode certificates from signed PE files.
         using var cert = new System.Security.Cryptography.X509Certificates.X509Certificate2(
             System.Security.Cryptography.X509Certificates.X509Certificate.CreateFromSignedFile(path));
+#pragma warning restore SYSLIB0057
         var publisher = cert.GetNameInfo(System.Security.Cryptography.X509Certificates.X509NameType.SimpleName, false);
         if (!new[] { "Microsoft Corporation", "Microsoft Windows" }.Contains(publisher, StringComparer.OrdinalIgnoreCase) ||
             !System.Text.RegularExpressions.Regex.IsMatch(cert.Subject, @"(?:^|,\s*)O=Microsoft Corporation(?:,|$)",

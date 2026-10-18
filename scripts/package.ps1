@@ -27,12 +27,23 @@ try {
     & dotnet @arguments
     if ($LASTEXITCODE -ne 0) { throw "Publishing win-$Architecture failed." }
 
+    $cache = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget\packages' }
     $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
-    $mt = Get-ChildItem -LiteralPath $sdkBin -Directory |
-        Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
-        Sort-Object { [version]$_.Name } -Descending |
-        ForEach-Object { Join-Path $_.FullName 'x64\mt.exe' } |
-        Where-Object { Test-Path $_ } | Select-Object -First 1
+    $mt = if (Test-Path $sdkBin) {
+        Get-ChildItem -LiteralPath $sdkBin -Directory |
+            Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } |
+            Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64\mt.exe' } |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+    } else { $null }
+    if (!$mt) {
+        $buildTools = Join-Path $cache 'microsoft.windows.sdk.buildtools'
+        if (Test-Path $buildTools) {
+            $mt = Get-ChildItem -LiteralPath $buildTools -Filter mt.exe -Recurse |
+                Where-Object { $_.FullName -like "*\x64\mt.exe" } |
+                Select-Object -ExpandProperty FullName -First 1
+        }
+    }
     if (!$mt) { throw 'Windows SDK mt.exe is required to verify the packaged administrator manifest.' }
     $manifest = Join-Path $stage 'embedded.manifest'
     & $mt -nologo "-inputresource:$publish\Tiny11Builder.exe;#1" "-out:$manifest"
