@@ -5,7 +5,7 @@ Windows image or use your own, choose what to remove, and create your ISO.
 
 ## Download
 
-[**Get the latest version**](https://github.com/ntdevlabs/tiny11builder/releases/latest)
+[**Get the latest version**](https://github.com/supersharp/tiny11builder/releases/latest)
 
 Choose **x64** for Intel/AMD PCs or **ARM64** for Windows on ARM. Extract the
 entire ZIP and open `Tiny11Builder.exe`. Administrator approval is required.
