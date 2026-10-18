@@ -2,11 +2,16 @@ name: Build and package
 
 on:
   push:
+    branches:
+      - main
+      - winui-preview
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -46,3 +51,25 @@ jobs:
             artifacts\release\*.zip
             artifacts\release\*.sha256
           if-no-files-found: error
+
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all release packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Tiny11Builder-win-*
+          path: artifacts/release
+          merge-multiple: true
+      - name: Create GitHub release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/release/*.zip
+            artifacts/release/*.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

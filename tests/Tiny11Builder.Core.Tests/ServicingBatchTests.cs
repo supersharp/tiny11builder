@@ -61,14 +61,13 @@ public sealed class CapabilityBatchTests
     [InlineData("Removed", RemovalProof.Unknown)]
     [InlineData("", RemovalProof.Unknown)]
     [InlineData(null, RemovalProof.Unknown)]
-    public void Only_Not_Present_is_proof_that_a_capability_is_gone(string? state, RemovalProof expected) =>
+    public void Capability_states_are_classified(string? state, RemovalProof expected) =>
         Assert.Equal(expected, DismClient.ClassifyCapabilityState(state));
 
     [Theory]
     [InlineData("Installed", "still present")]
-    [InlineData("Uninstall Pending", "removal pending")]
     [InlineData("Surprise", "unrecognised state")]
-    public async Task A_batch_whose_absence_is_not_proven_fails_with_a_distinct_diagnostic(string state, string diagnostic)
+    public async Task A_batch_whose_removal_is_not_accepted_fails_with_a_distinct_diagnostic(string state, string diagnostic)
     {
         using var fixture = Fixture();
         fixture.Runner.CapabilityStateAfterRemoval = state;
@@ -77,6 +76,20 @@ public sealed class CapabilityBatchTests
             dism.RemoveCapabilitiesAsync(@"C:\mock\mount", ["Language.OCR~~~en-US~0.0.1.0"], CancellationToken.None));
         Assert.Contains(diagnostic, failure.Message);
         Assert.Contains("Language.OCR~~~en-US~0.0.1.0", failure.Message);
+    }
+
+    [Fact]
+    public async Task A_batch_with_uninstall_pending_is_accepted()
+    {
+        using var fixture = Fixture();
+        fixture.Runner.CapabilityStateAfterRemoval = "Uninstall Pending";
+        var dism = new DismClient(@"C:\mock\dism.exe", fixture.Runner);
+        var result = await dism.RemoveCapabilitiesAsync(@"C:\mock\mount", ["Language.OCR~~~en-US~0.0.1.0"], CancellationToken.None);
+        Assert.Single(result.Items);
+        Assert.True(result.Items[0].Accepted);
+        Assert.Equal(RemovalProof.Pending, result.Items[0].Proof);
+        Assert.Contains("removal pending", result.Items[0].Describe());
+        Assert.Contains("serviced online", result.Items[0].Describe());
     }
 
     [Fact]
@@ -145,16 +158,31 @@ public sealed class CapabilityBatchTests
     public async Task A_failed_Turbo_capability_batch_fails_every_member_and_the_build_and_discards_the_mount()
     {
         using var fixture = Fixture("App.StepsRecorder~~~~0.0.1.0");
-        fixture.Runner.CapabilityStateAfterRemoval = "Uninstall Pending";
+        fixture.Runner.CapabilityStateAfterRemoval = "Installed";
         var events = new List<BuildProgress>();
         var failure = await Assert.ThrowsAsync<BuildFailureException>(() => fixture.Engine.BuildAsync(
             CapabilityRecipe(fixture, turbo: true), new ImmediateProgress<BuildProgress>(events.Add), CancellationToken.None));
-        Assert.Contains("removal pending", failure.Message);
+        Assert.Contains("still present", failure.Message);
         Assert.All(new[] { "App.StepsRecorder~~~~0.0.1.0", "Language.OCR~~~en-US~0.0.1.0" }, id =>
             Assert.Equal(BuildOperationState.Failed, events.Last(item => item.OperationId == "capability:" + id).State));
         Assert.Contains(fixture.Runner.Calls, call => call.Contains("/Unmount-Image") && call.Contains("/Discard"));
         Assert.False(File.Exists(fixture.Recipe.OutputPath));
         Assert.False(JobCheckpoint.Exists(failure.WorkDirectory));    // never committed: nothing to resume
+    }
+
+    [Fact]
+    public async Task Turbo_accepts_uninstall_pending_and_completes_the_build()
+    {
+        using var fixture = Fixture("App.StepsRecorder~~~~0.0.1.0");
+        fixture.Runner.CapabilityStateAfterRemoval = "Uninstall Pending";
+        var events = new List<BuildProgress>();
+        var result = await fixture.Engine.BuildAsync(CapabilityRecipe(fixture, turbo: true),
+            new ImmediateProgress<BuildProgress>(events.Add), CancellationToken.None);
+        Assert.True(File.Exists(result.IsoPath));
+        var completed = events.Last(item => item.OperationId == "capability:App.StepsRecorder~~~~0.0.1.0");
+        Assert.Equal(BuildOperationState.Completed, completed.State);
+        Assert.Contains("removal pending", completed.Detail);
+        Assert.Contains("shared by the whole batch", completed.Detail);
     }
 }
 

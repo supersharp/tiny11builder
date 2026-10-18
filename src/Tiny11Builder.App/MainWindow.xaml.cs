@@ -212,6 +212,7 @@ public sealed partial class MainWindow : Window
         StepRail.IsEnabled = !busy && !completed;
         RecoverButton.IsEnabled = !busy;
         ResumeButton.IsEnabled = !busy;
+        if (ImportRecipeButton is not null) ImportRecipeButton.IsEnabled = !busy;
         ThemeChoice.IsEnabled = !busy && !HighContrast;
         // Advisory only: the checkpoint file's presence decides whether to offer Resume; the engine verifies it.
         ResumeRunButton.Visibility = !busy && step == 5 && !completed && stoppedRun == OperationKind.Build && stoppedHasCheckpoint ?

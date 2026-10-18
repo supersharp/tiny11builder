@@ -94,14 +94,14 @@ public sealed class DismClient(string executable, IProcessRunner runner, Action<
             states.TryGetValue(name, out var state);
             return new RemovalVerification(name, state, ClassifyCapabilityState(state));
         }).ToArray();
-        var unproven = items.Where(item => item.Proof != RemovalProof.Absent).ToArray();
+        var unproven = items.Where(item => !item.Accepted).ToArray();
         if (unproven.Length > 0)
             throw new InvalidDataException("Capability batch did not prove removal: " +
                 string.Join("; ", unproven.Select(item => $"{item.Name} => {item.Describe()}")) + ".");
         return new(output, items);
     }
 
-    /// <summary>Only "Not Present" proves a capability is gone; installed, pending, missing and unrecognized states are not proof.</summary>
+    /// <summary>Absent ("Not Present") or pending ("Uninstall Pending") proves the capability was removed or scheduled for removal; installed, staged, missing and unrecognized states are not proof.</summary>
     public static RemovalProof ClassifyCapabilityState(string? state)
     {
         var normalized = Regex.Replace(state ?? "", @"\s+", " ").Trim().ToLowerInvariant();
@@ -190,10 +190,12 @@ public enum RemovalProof { Absent, Pending, Present, Unknown }
 
 public sealed record RemovalVerification(string Name, string? State, RemovalProof Proof)
 {
+    public bool Accepted => Proof is RemovalProof.Absent or RemovalProof.Pending;
+
     public string Describe() => Proof switch
     {
         RemovalProof.Absent => $"absent (state '{State}')",
-        RemovalProof.Pending => $"removal pending (state '{State}'); an offline image cannot prove it is removed",
+        RemovalProof.Pending => $"removal pending (state '{State}'); it completes when the image is serviced online",
         RemovalProof.Present => $"still present (state '{State}')",
         _ => State is null ? "missing from the post-removal inventory" : $"unrecognised state '{State}'"
     };

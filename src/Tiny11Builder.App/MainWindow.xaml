@@ -97,7 +97,21 @@
                             </StackPanel>
                             <Grid Grid.Row="1" RowSpacing="12">
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                                <TextBlock Text="Build modes" FontSize="18" FontWeight="SemiBold"/>
+                                <Grid VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Build modes" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <Button x:Name="ImportRecipeButton" Grid.Column="1" Click="OnLoadRecipe" VerticalAlignment="Center"
+                                            AutomationProperties.Name="Import recipe"
+                                            AutomationProperties.HelpText="Load an existing recipe file to restore all selections and settings.">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE8E5;" FontSize="14"/>
+                                            <TextBlock Text="Import recipe"/>
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
                                 <Grid x:Name="ModeCards" Grid.Row="1" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>

@@ -341,7 +341,7 @@ public sealed partial class BuildEngine
             {
                 if (!removalCapabilities.Any(c => option.Targets.Any(p => c.Identity.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
                                                                          c.Identity.StartsWith(p + "~", StringComparison.OrdinalIgnoreCase))))
-                    tracking.Skip("missing-capability:" + option.Id, "Optional features", option.Title, "No matching installed capability");
+                    tracking.Skip("missing-capability:" + option.Id, "Optional features", option.Title, "Not present in this image");
             }
             if (recipe.TurboMode && removalCapabilities.Length > 0)
             {

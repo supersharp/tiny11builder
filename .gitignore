@@ -10,3 +10,4 @@ TestResults/
 *.swm
 *.vhd
 *.vhdx
+*.log
