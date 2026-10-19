@@ -52,7 +52,15 @@ The original PowerShell builders remain in this repository.
 
 ## Support the project
 
-[GitHub Sponsors](https://github.com/sponsors/ntdevlabs) ·
-[Patreon](https://www.patreon.com/ntdev) ·
-[PayPal](https://paypal.me/ntdev2) ·
-[Ko-fi](https://ko-fi.com/ntdev)
+Tiny11 Builder is free. If it saved you time, you can help fund development,
+testing across Windows releases and fixes for reported problems.
+
+**[Monthly support](https://github.com/sponsors/ntdevlabs)** ·
+**[One-time donation](https://ko-fi.com/ntdev)**
+
+Prefer another service? [Patreon](https://www.patreon.com/ntdev) ·
+[PayPal](https://paypal.me/ntdev2)
+
+No donation is needed to use any feature. Reporting reproducible bugs,
+testing builds in a VM and sharing the [demo](https://youtu.be/LfEWIz5mQ8A)
+help too.

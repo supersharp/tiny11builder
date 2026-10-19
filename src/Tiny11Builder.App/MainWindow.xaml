@@ -41,7 +41,11 @@
                     <ComboBox x:Name="ThemeChoice" Header="Appearance" SelectionChanged="OnThemeChanged" HorizontalAlignment="Stretch" SelectedIndex="0">
                         <ComboBoxItem Content="System"/><ComboBoxItem Content="Light"/><ComboBoxItem Content="Dark"/>
                     </ComboBox>
-                    <HyperlinkButton Content="Upstream project ↗" NavigateUri="https://github.com/ntdevlabs/tiny11builder" Padding="0"/>
+                    <StackPanel Spacing="4">
+                        <HyperlinkButton x:Name="SupportButton" Content="Support development" Click="OnSupport" Padding="0"
+                                         AutomationProperties.HelpText="Optional monthly support or one-time donation. All app features remain free."/>
+                        <HyperlinkButton Content="Upstream project ↗" NavigateUri="https://github.com/ntdevlabs/tiny11builder" Padding="0"/>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
             <Grid Grid.Column="1" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="16,0,0,0"
@@ -492,6 +496,11 @@
                                         <Button Content="Open logs and report" Click="OnOpenLogs"/>
                                     </StackPanel>
                                     <TextBlock Text="Test the ISO in a VM before installing Windows." Style="{StaticResource Hint}"/>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="If Tiny11 Builder saved you time, you can support its development." Style="{StaticResource Hint}"/>
+                                        <HyperlinkButton Content="Support development" Click="OnSupport" Padding="0"
+                                                         AutomationProperties.HelpText="Optional support. Opens support choices, not a payment."/>
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                             <StackPanel Spacing="16">
@@ -574,5 +583,30 @@
                              Visibility="Collapsed" AutomationProperties.Name="Working"/>
             </Grid>
         </Grid>
+        <ContentDialog x:Name="SupportDialog" Title="Support Tiny11 Builder" CloseButtonText="Close"
+                       DefaultButton="Close">
+            <StackPanel Spacing="20" MaxWidth="440">
+                <TextBlock x:Name="SupportPurpose" TextWrapping="Wrap"/>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Monthly support" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock Text="Help keep the project maintained over time." Style="{StaticResource Secondary}"/>
+                    <HyperlinkButton x:Name="SponsorsLink" Content="Support monthly on GitHub Sponsors" Click="OnSupportDestination" Tag="Sponsors" Padding="0"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="One-time donation" FontSize="18" FontWeight="SemiBold"/>
+                    <TextBlock Text="A one-off thank-you, with no commitment." Style="{StaticResource Secondary}"/>
+                    <HyperlinkButton x:Name="KofiLink" Content="Donate once on Ko-fi" Click="OnSupportDestination" Tag="Kofi" Padding="0"/>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Prefer another service?" Style="{StaticResource Hint}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="20">
+                        <HyperlinkButton Content="Patreon" Click="OnSupportDestination" Tag="Patreon" Padding="0"/>
+                        <HyperlinkButton Content="PayPal" Click="OnSupportDestination" Tag="PayPal" Padding="0"/>
+                    </StackPanel>
+                </StackPanel>
+                <TextBlock Text="Links open in your browser. Nothing is charged or subscribed to in the app." Style="{StaticResource Hint}"/>
+                <InfoBar x:Name="SupportError" IsOpen="False" IsClosable="True" Severity="Error"/>
+            </StackPanel>
+        </ContentDialog>
     </Grid>
 </Window>

@@ -81,14 +81,16 @@ public sealed class DismClient(string executable, IProcessRunner runner, Action<
         var names = capabilityNames.Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (names.Length == 0) throw new ArgumentException("At least one capability is required.", nameof(capabilityNames));
-        // RunAsync accepts exit codes 0 and 3010, so success is decided by the post-removal inventory, never by the exit code alone.
+        // The inventory distinguishes absence from a deferred uninstall; exit 0 or 3010 alone proves neither.
         var output = await RunAsync(token, [$"/Image:{mount}", "/Remove-Capability",
             .. names.Select(name => $"/CapabilityName:{name}"), "/NoRestart"]).ConfigureAwait(false);
         var inventory = ImageInventory.ParseIdentityStates(
             await RunAsync(token, $"/Image:{mount}", "/Get-Capabilities").ConfigureAwait(false),
             "Capability Identity", ImageItemKind.Capability);
         var states = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var item in inventory) states.TryAdd(item.Identity, item.Detail);
+        foreach (var item in inventory)
+            if (!states.TryAdd(item.Identity, item.Detail))
+                throw new InvalidDataException($"DISM returned duplicate capability states for {item.Identity}.");
         var items = names.Select(name =>
         {
             states.TryGetValue(name, out var state);
@@ -101,7 +103,7 @@ public sealed class DismClient(string executable, IProcessRunner runner, Action<
         return new(output, items);
     }
 
-    /// <summary>Absent ("Not Present") or pending ("Uninstall Pending") proves the capability was removed or scheduled for removal; installed, staged, missing and unrecognized states are not proof.</summary>
+    /// <summary>Only "Not Present" proves absence; "Uninstall Pending" is a deferred request, not a completed removal.</summary>
     public static RemovalProof ClassifyCapabilityState(string? state)
     {
         var normalized = Regex.Replace(state ?? "", @"\s+", " ").Trim().ToLowerInvariant();
@@ -190,12 +192,15 @@ public enum RemovalProof { Absent, Pending, Present, Unknown }
 
 public sealed record RemovalVerification(string Name, string? State, RemovalProof Proof)
 {
-    public bool Accepted => Proof is RemovalProof.Absent or RemovalProof.Pending;
+    public bool Deferred => Proof == RemovalProof.Pending &&
+        Regex.Replace(State ?? "", @"\s+", " ").Trim().Equals("Uninstall Pending", StringComparison.OrdinalIgnoreCase);
+    public bool Accepted => Proof == RemovalProof.Absent || Deferred;
 
     public string Describe() => Proof switch
     {
         RemovalProof.Absent => $"absent (state '{State}')",
-        RemovalProof.Pending => $"removal pending (state '{State}'); it completes when the image is serviced online",
+        RemovalProof.Pending when Deferred => $"removal deferred until first boot (state '{State}'); not yet absent",
+        RemovalProof.Pending => $"unexpected pending state '{State}'; removal was not verified",
         RemovalProof.Present => $"still present (state '{State}')",
         _ => State is null ? "missing from the post-removal inventory" : $"unrecognised state '{State}'"
     };

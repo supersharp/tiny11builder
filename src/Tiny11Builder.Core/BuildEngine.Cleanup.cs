@@ -12,6 +12,17 @@ public sealed partial class BuildEngine
 
     private static async Task CleanComponentsAsync(BuildSession s, CancellationToken token)
     {
+        token.ThrowIfCancellationRequested();
+        if (s.Capabilities.Any(item => item.Deferred))
+        {
+            if (RemovesComponentPayloads(s.Recipe)) throw Refuse(s, DeferredCapabilityEvidence(s), null);
+            s.CleanupDeferredForPending = true;
+            const string reason = "Capability removals are deferred until first boot. Superseded components were not cleaned; pending payloads are retained.";
+            s.Warn("Component cleanup was skipped: " + reason);
+            s.Tracking.SkipStage(reason);
+            return;
+        }
+
         if (!OperatingSystem.IsWindows())
             throw new PlatformNotSupportedException("Checking an offline image for pending operations requires Windows.");
         var scan = await PendingOperations.ScanAsync(s.Dism, s.Mount, token).ConfigureAwait(false);
@@ -22,7 +33,6 @@ public sealed partial class BuildEngine
             DeferCleanupForPending(s);
             return;
         }
-
         try
         {
             await s.Dism.RunAsync(token, s.Recipe.Flavor == BuildFlavor.Core ?
@@ -48,10 +58,11 @@ public sealed partial class BuildEngine
     private static IReadOnlyList<string> OriginalFileOptions(BuildSession s)
     {
         var options = s.Recipe.SelectedOptions;
-        if (!s.CleanupDeferredForPending || !options.Contains("edge-files")) return options;
+        if ((!s.CleanupDeferredForPending && !s.Capabilities.Any(item => item.Deferred)) || !options.Contains("edge-files")) return options;
         s.Tracking.Skip("retained:edge-files", "Advanced payloads", CleanupCatalog.Options.Single(option => option.Id == "edge-files").Title,
             "Retained because pending servicing may reference these component files");
-        s.Warn("Edge and WebView2 removal was selected but not applied: pending operations (0x800F0806) may reference their component files, " +
+        var pending = s.Capabilities.Any(item => item.Deferred) ? "pending capability removals" : "pending operations (0x800F0806)";
+        s.Warn($"Edge and WebView2 removal was selected but not applied: {pending} may reference their component files, " +
             "so all Edge files were kept.");
         return options.Where(option => option != "edge-files").ToArray();
     }
@@ -60,11 +71,16 @@ public sealed partial class BuildEngine
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Checking an offline image for pending operations requires Windows.");
         s.Log("Checking the image for pending operations before any component file is removed.");
+        token.ThrowIfCancellationRequested();
+        if (s.Capabilities.Any(item => item.Deferred)) throw Refuse(s, DeferredCapabilityEvidence(s), null);
         var scan = await PendingOperations.ScanAsync(s.Dism, s.Mount, token).ConfigureAwait(false);
         if (scan.Pending.Count > 0) throw Refuse(s, scan.Pending, null);
         s.Log($"No pending operations found ({scan.Packages} packages and {scan.Features} features checked).");
         token.ThrowIfCancellationRequested();
     }
+
+    private static string[] DeferredCapabilityEvidence(BuildSession s) => s.Capabilities.Where(item => item.Deferred)
+        .Select(item => $"capability {item.Name}: {item.State}").ToArray();
 
     private static PendingOperationsException Refuse(BuildSession s, IReadOnlyList<string> evidence, Exception? inner)
     {

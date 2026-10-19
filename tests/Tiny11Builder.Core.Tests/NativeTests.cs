@@ -70,12 +70,105 @@ public sealed class NativeTests(Xunit.Abstractions.ITestOutputHelper output)
         Directory.CreateDirectory(Path.GetDirectoryName(inside)!);
         File.WriteAllText(inside, "offline");
         File.WriteAllText(outside, "host fixture must remain");
+        SaveFixtureHive(Path.Combine(mount, @"Windows\System32\config\SOFTWARE"));
         new ImageOperations().RemoveOriginalFiles(mount, "x64", ["edge-files"], _ => { });
         Assert.False(File.Exists(inside));
         Assert.Equal("host fixture must remain", File.ReadAllText(outside));
         Assert.Throws<InvalidDataException>(() => new ImageOperations().RemoveOriginalFiles(fixture.Root, "x64", ["edge-files"], _ => { }));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Removed_Edge_has_no_stale_offline_uninstall_entry_and_unrelated_entries_survive(bool turbo)
+    {
+        using var fixture = new BuildFixture();
+        var mount = CreateOwnedMount(fixture.Root);
+        var software = Path.Combine(mount, @"Windows\System32\config\SOFTWARE");
+        SaveFixtureHive(software);
+        string[] uninstall =
+        [
+            @"Microsoft\Windows\CurrentVersion\Uninstall",
+            @"WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        ];
+        using (var hive = OfflineRegistry.Load(software))
+            foreach (var root in uninstall)
+            {
+                foreach (var name in new[] { "Microsoft Edge", "Microsoft Edge Update", "Microsoft Edge WebView2 Runtime", "UnrelatedApp" })
+                {
+                    using var key = OfflineRegistry.OpenWriteKey(hive.Root, root + "\\" + name);
+                    key.SetValue("DisplayName", name);
+                    key.SetValue("Publisher", name == "UnrelatedApp" ? "Other publisher" : "Microsoft Corporation");
+                }
+            }
+        var browser = Path.Combine(mount, @"Program Files (x86)\Microsoft\Edge\Application\msedge.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(browser)!);
+        File.WriteAllText(browser, "offline browser");
+        var messages = new List<string>();
+        new ImageOperations().RemoveOriginalFiles(mount, "x64", ["edge-files"], messages.Add, turbo);
+        Assert.False(File.Exists(browser));
+        using (var hive = OfflineRegistry.Load(software, false))
+            foreach (var root in uninstall)
+            {
+                using var parent = hive.Root.OpenSubKey(root);
+                Assert.DoesNotContain("Microsoft Edge", parent!.GetSubKeyNames());
+                Assert.Contains("Microsoft Edge Update", parent.GetSubKeyNames());
+                Assert.Contains("Microsoft Edge WebView2 Runtime", parent.GetSubKeyNames());
+                Assert.Contains("UnrelatedApp", parent.GetSubKeyNames());
+            }
+        Assert.Equal(2, messages.Count(message => message.StartsWith("Removed offline Edge uninstall entry:", StringComparison.Ordinal)));
+        Assert.Empty(Directory.EnumerateFiles(Path.GetDirectoryName(mount)!, "*.hive.json"));
+    }
+
+    [Fact]
+    public void Retained_Edge_files_keep_their_registration_and_mismatched_publisher_is_never_deleted()
+    {
+        using var fixture = new BuildFixture();
+        var mount = CreateOwnedMount(fixture.Root);
+        var software = Path.Combine(mount, @"Windows\System32\config\SOFTWARE");
+        SaveFixtureHive(software);
+        const string location = @"Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge";
+        using (var hive = OfflineRegistry.Load(software))
+        using (var key = OfflineRegistry.OpenWriteKey(hive.Root, location))
+        {
+            key.SetValue("DisplayName", "Microsoft Edge");
+            key.SetValue("Publisher", "Other publisher");
+        }
+        var original = File.ReadAllBytes(software);
+        new ImageOperations().RemoveOriginalFiles(mount, "x64", [], _ => { });
+        Assert.Equal(original, File.ReadAllBytes(software));
+        new ImageOperations().RemoveOriginalFiles(mount, "x64", ["edge-files"], _ => { });
+        using (var hive = OfflineRegistry.Load(software, false))
+        using (var entry = hive.Root.OpenSubKey(location))
+            Assert.Equal("Other publisher", entry!.GetValue("Publisher"));
+    }
+
+    [Fact]
+    public void Edge_removal_failure_keeps_its_installed_program_registration()
+    {
+        using var fixture = new BuildFixture();
+        var mount = CreateOwnedMount(fixture.Root);
+        var software = Path.Combine(mount, @"Windows\System32\config\SOFTWARE");
+        SaveFixtureHive(software);
+        const string location = @"Microsoft\Windows\CurrentVersion\Uninstall\Microsoft Edge";
+        using (var hive = OfflineRegistry.Load(software))
+        using (var key = OfflineRegistry.OpenWriteKey(hive.Root, location))
+        {
+            key.SetValue("DisplayName", "Microsoft Edge");
+            key.SetValue("Publisher", "Microsoft Corporation");
+        }
+        var outside = Path.Combine(fixture.Root, "outside-browser");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "browser.exe"), "keep");
+        var parent = Path.Combine(mount, @"Program Files (x86)\Microsoft");
+        Directory.CreateDirectory(parent);
+        Directory.CreateSymbolicLink(Path.Combine(parent, "Edge"), outside);
+        Assert.Throws<InvalidDataException>(() => new ImageOperations().RemoveOriginalFiles(mount, "x64", ["edge-files"], _ => { }));
+        using (var hive = OfflineRegistry.Load(software, false))
+        using (var entry = hive.Root.OpenSubKey(location))
+            Assert.Equal("Microsoft Edge", entry!.GetValue("DisplayName"));
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(outside, "browser.exe")));
+    }
     [Fact]
     public void Search_policy_avoids_the_protected_user_preference_and_verifies_the_supported_machine_policy()
     {

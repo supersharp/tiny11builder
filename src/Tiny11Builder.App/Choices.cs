@@ -138,7 +138,7 @@ public sealed class BuildStageChoice(string title, string glyph) : ObservableCho
             if (isStage) tally.Own = state;
             else { tally.Items[(int)prior]--; tally.Items[(int)state]++; }
         }
-        if (progress.Detail is not null && progress.State is BuildOperationState.Skipped or BuildOperationState.Failed or BuildOperationState.Cancelled)
+        if (progress.Detail is not null && progress.State is BuildOperationState.Completed or BuildOperationState.Skipped or BuildOperationState.Failed or BuildOperationState.Cancelled)
             operation.SetDetail(progress.Detail);
         RefreshStatus();
     }

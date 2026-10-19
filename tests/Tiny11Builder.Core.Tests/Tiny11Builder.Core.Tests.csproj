@@ -14,6 +14,8 @@
     <!-- WinUI-free app logic, compiled as-is so the tests run the shipped code. -->
     <Compile Include="..\..\src\Tiny11Builder.App\Choices.cs" Link="AppLogic\Choices.cs"/>
     <Compile Include="..\..\src\Tiny11Builder.App\OperationFlow.cs" Link="AppLogic\OperationFlow.cs"/>
+    <Compile Include="..\..\src\Tiny11Builder.App\ProjectSupport.cs" Link="AppLogic\ProjectSupport.cs"/>
+    <None Include="..\..\src\Tiny11Builder.App\MainWindow.xaml" Link="Deployment\MainWindow.xaml" CopyToOutputDirectory="PreserveNewest"/>
     <None Include="..\..\src\Tiny11Builder.App\app.manifest" Link="Deployment\app.manifest" CopyToOutputDirectory="PreserveNewest"/>
   </ItemGroup>
 </Project>

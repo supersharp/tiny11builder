@@ -273,9 +273,16 @@ public sealed partial class BuildEngine
                 foreach (var action in servicingActions)
                     tracking.Plan($"expert:{action.Kind}:{action.Identity}", "Custom servicing", $"{action.Mode} {action.Kind}: {action.Identity}");
                 foreach (var action in servicingActions)
+                {
+                    if (action.Kind == ImageItemKind.Capability)
+                    {
+                        await RemoveCapabilitiesAsync(session, [action.Identity], false, "Custom servicing", token, expert: true).ConfigureAwait(false);
+                        continue;
+                    }
                     await tracking.RunAsync($"expert:{action.Kind}:{action.Identity}", "Custom servicing",
                         $"{action.Mode} {action.Kind}: {action.Identity}",
                         () => ApplyDismActionAsync(dism, mount, action, token)).ConfigureAwait(false);
+                }
             }
             Stage("Remove apps", "Removing selected provisioned apps by exact identity.");
             var appOptions = CleanupCatalog.Options.Where(o => o.Kind == OptionKind.App && recipe.SelectedOptions.Contains(o.Id)).ToArray();
@@ -307,9 +314,20 @@ public sealed partial class BuildEngine
                 capabilityOptions.Any(o => o.Targets.Any(p => c.Identity.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
                                                              c.Identity.StartsWith(p + "~", StringComparison.OrdinalIgnoreCase))))
                 .DistinctBy(c => c.Identity, StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (var pending in capabilities.Where(c =>
+                         new RemovalVerification(c.Identity, c.Detail, DismClient.ClassifyCapabilityState(c.Detail)).Deferred &&
+                         capabilityOptions.Any(o => o.Targets.Any(p => c.Identity.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
+                                                                    c.Identity.StartsWith(p + "~", StringComparison.OrdinalIgnoreCase)))))
+            {
+                var outcome = new RemovalVerification(pending.Identity, pending.Detail, RemovalProof.Pending);
+                await tracking.RunAsync("capability:" + pending.Identity, "Optional features",
+                    $"Capability removal already deferred: {pending.Identity}", () => Task.CompletedTask,
+                    () => Sentence(outcome.Describe())).ConfigureAwait(false);
+                RecordCapabilities(session, [outcome]);
+            }
             foreach (var name in featureNames) tracking.Plan("feature:" + name, "Optional features", $"Remove optional feature: {name}");
             foreach (var capability in removalCapabilities)
-                tracking.Plan("capability:" + capability.Identity, "Optional features", $"Remove capability: {capability.Identity}");
+                tracking.Plan("capability:" + capability.Identity, "Optional features", $"Request capability removal: {capability.Identity}");
             foreach (var option in featureOptions)
             {
                 var matching = option.Targets.Where(features.ContainsKey).ToArray();
@@ -339,29 +357,15 @@ public sealed partial class BuildEngine
                         () => dism.RunAsync(token, $"/Image:{mount}", "/Disable-Feature", $"/FeatureName:{feature}", "/Remove", "/NoRestart")).ConfigureAwait(false);
             foreach (var option in capabilityOptions)
             {
-                if (!removalCapabilities.Any(c => option.Targets.Any(p => c.Identity.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
+                if (!session.Capabilities.Any(c => option.Targets.Any(p => c.Name.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
+                                                                         c.Name.StartsWith(p + "~", StringComparison.OrdinalIgnoreCase))) &&
+                    !removalCapabilities.Any(c => option.Targets.Any(p => c.Identity.StartsWith(p + ".", StringComparison.OrdinalIgnoreCase) ||
                                                                          c.Identity.StartsWith(p + "~", StringComparison.OrdinalIgnoreCase))))
                     tracking.Skip("missing-capability:" + option.Id, "Optional features", option.Title, "Not present in this image");
             }
-            if (recipe.TurboMode && removalCapabilities.Length > 0)
-            {
-                var capabilityNames = removalCapabilities.Select(c => c.Identity).ToArray();
-                Log($"Turbo capability batch (one command with repeated /CapabilityName): {string.Join(", ", capabilityNames)}");
-                BatchRemovalResult? capabilityBatch = null;
-                await tracking.RunBatchAsync(removalCapabilities.Select(c => ("capability:" + c.Identity, $"Remove capability: {c.Identity}")).ToArray(),
-                    "Optional features", async () =>
-                    {
-                        capabilityBatch = await dism.RemoveCapabilitiesAsync(mount, capabilityNames, token).ConfigureAwait(false);
-                    }, "capabilities",
-                    id => capabilityBatch?.Items.FirstOrDefault(item => string.Equals("capability:" + item.Name, id, StringComparison.OrdinalIgnoreCase))
-                        is { } verified ? Sentence("verified " + verified.Describe()) : null).ConfigureAwait(false);
-                foreach (var verified in capabilityBatch!.Items) Log($"Verified capability removal: {verified.Name} => {verified.Describe()}");
-                session.Capabilities.AddRange(capabilityBatch.Items);
-            }
-            else
-                foreach (var capability in removalCapabilities)
-                    await tracking.RunAsync("capability:" + capability.Identity, "Optional features", $"Remove capability: {capability.Identity}",
-                        () => dism.RunAsync(token, $"/Image:{mount}", "/Remove-Capability", $"/CapabilityName:{capability.Identity}", "/NoRestart")).ConfigureAwait(false);
+            await RemoveCapabilitiesAsync(session, removalCapabilities.Select(c => c.Identity).ToArray(),
+                recipe.TurboMode, "Optional features", token).ConfigureAwait(false);
+            WarnDeferredCapabilities(session);
             // DISM refuses cleanup while operations are pending, and .NET 3.5 leaves some until first boot.
             if (recipe.SelectedOptions.Contains("cleanup") || recipe.Flavor == BuildFlavor.Core)
             {

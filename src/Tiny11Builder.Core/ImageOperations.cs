@@ -126,6 +126,7 @@ public sealed class ImageOperations : IImageOperations
         foreach (var path in Directory.EnumerateDirectories(store).Where(p =>
                      Path.GetFileName(p).Contains("microsoft-edge-webview", StringComparison.OrdinalIgnoreCase)).ToArray())
             Remove(mount, Path.GetRelativePath(mount, path), log, turboMode: turboMode);
+        EdgeRegistration.RemoveAfterFiles(mount, log);
     }
 
     public static bool PreserveCoreDirectory(string name)

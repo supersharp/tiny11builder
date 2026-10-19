@@ -78,6 +78,7 @@ public sealed partial class MainWindow : Window
                 $"Choose {CancelPrompts.ButtonLabel} and wait for the image operation to finish before closing.", InfoBarSeverity.Warning);
         };
         WorkspaceBox.Text = @"C:\tiny11";
+        SupportPurpose.Text = ProjectSupport.Purpose;
         OutputBox.Text = Path.Combine(WorkspaceBox.Text, $"tiny11-{DateTime.Now:yyyyMMdd-HHmmss}.iso");
         BuildStages.ItemsSource = board.Stages;
         progressTimer.Tick += (_, _) => { FlushBuildProgress(); DrainDownload(); };
@@ -211,6 +212,7 @@ public sealed partial class MainWindow : Window
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(NextButton, ActionLabel.Text);
         StepRail.IsEnabled = !busy && !completed;
         RecoverButton.IsEnabled = !busy;
+        SupportButton.IsEnabled = !busy;
         ResumeButton.IsEnabled = !busy;
         if (ImportRecipeButton is not null) ImportRecipeButton.IsEnabled = !busy;
         ThemeChoice.IsEnabled = !busy && !HighContrast;
@@ -582,6 +584,50 @@ public sealed partial class MainWindow : Window
         {
             modalOpen = false;
             RestoreFocus(previousFocus);
+        }
+    }
+
+    private async void OnSupport(object sender, RoutedEventArgs args)
+    {
+        if (busy || modalOpen || Root.XamlRoot is null) return;
+        modalOpen = true;
+        var previousFocus = CurrentFocus();
+        try
+        {
+            SupportDialog.XamlRoot = Root.XamlRoot;
+            SupportDialog.RequestedTheme = DialogTheme();
+            SupportError.IsOpen = false;
+            await SupportDialog.ShowAsync();
+        }
+        catch (Exception error)
+        {
+            ShowNotice("Support options could not be opened.", ErrorText.Reason(error),
+                InfoBarSeverity.Error, NoticeAction.CopyDetails, error.ToString());
+        }
+        finally
+        {
+            modalOpen = false;
+            RestoreFocus(previousFocus);
+        }
+    }
+
+    private async void OnSupportDestination(object sender, RoutedEventArgs args)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { Tag: string tag } ||
+                !Enum.TryParse<SupportDestination>(tag, out var destination))
+                throw new InvalidDataException("This support link has no valid destination.");
+            var uri = ProjectSupport.Link(destination);
+            if (!await Windows.System.Launcher.LaunchUriAsync(uri))
+                throw new IOException($"Your browser could not open {uri}. No payment was made.");
+            SupportError.IsOpen = false;
+        }
+        catch (Exception error)
+        {
+            SupportError.Title = "Could not open the support page";
+            SupportError.Message = ErrorText.Reason(error);
+            SupportError.IsOpen = true;
         }
     }
 

@@ -3,6 +3,11 @@
 Run the commands below from the repository root. For downloads, the video and
 screenshots, see the [project page](../README.md).
 
+Optional [project support](support.md) is available from **Support development**
+in the sidebar and on the successful-build page. The choices open only when
+clicked, never interrupt a build, and never unlock features. Payments happen
+on the selected provider's website, not inside the app.
+
 **WinUI 3 desktop application with a C# image builder.** Its step-by-step layout
 uses the [S9 WoA installer](https://github.com/ntdevlabs/exynos9810-woa) as a reference.
 It does not wrap or execute the PowerShell builders. The original scripts remain
@@ -116,6 +121,21 @@ mounted image, disable host antivirus, alter OS power settings, or remove
 integrity checking. The batch tracks every feature and reads back its state;
 a failed batch is reported as failed, not as individual successes.
 
+Capability removal is verified in both Standard and Turbo. **Uninstall Pending**
+means Windows accepted the uninstall but still needs to finish it at first boot.
+Serviceable builds retain the pending payloads and continue with a visible
+warning; the per-capability report and operation details say **deferred**, not
+absent. Superseded-component cleanup and selected Edge/WebView2 file removal
+are skipped while these removals are pending. **Install Pending**, still-installed,
+unknown, missing or conflicting post-removal states remain errors.
+Core and Custom component-store pruning still refuse pending removals.
+
+This can occur on previously serviced or UUP-converted media, including media
+created with updates and .NET 3.5 already integrated. It does not require deleting
+`pending.xml`, reverting servicing actions, or changing the UUP app list. A Core
+build needs a settled source without pending operations; a serviceable image
+can preserve them for first boot. Changing compression does not resolve them.
+
 The cleaner uses a fixed allowlist. It preserves the cache/log root directories,
 current `CBS.log` and `dism.log`, update databases, registry files, driver
 repositories, Windows Installer cache, and servicing manifests. Download and
@@ -141,6 +161,11 @@ When pending servicing is detected, selected Edge/WebView2 file removal is
 also skipped for the run, because its WinSxS files may be referenced by that
 work. The report records that those files were kept; it does not claim the
 requested removal succeeded. These warnings survive resume.
+When Edge's files are actually removed, the matching Microsoft Edge entry is
+also removed from both offline installed-program registry locations. Exact
+identity and publisher checks keep unrelated software, Edge Update and WebView2
+registrations outside this browser-entry cleanup. If file removal fails or is
+deferred, the entry is retained. The running PC's registry is never targeted.
 Core and explicit Custom component-payload removal also check pending files,
 package states and feature states immediately before deleting component files,
 even when cleanup is off. If enabling .NET 3.5 leaves pending work, those
@@ -379,7 +404,7 @@ runtime, and includes dependency license notices. It refuses to overwrite an
 existing archive for that version. Extract the entire ZIP into a folder and
 open `Tiny11Builder.exe`; copying just the EXE is not sufficient.
 
-The current app version is **0.1.2**. Packages are unsigned,
+The current app version is **0.1.3**. Packages are unsigned,
 not Microsoft-certified Windows images. Review [NOTICE.md](../NOTICE.md) before
 public redistribution: this upstream checkout has no standalone license file,
 and this rewrite does not assign a license to someone else's source.
